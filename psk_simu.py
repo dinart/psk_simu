@@ -20,7 +20,7 @@ import time
 class psk_simu(grc_wxgui.top_block_gui):
 
     def __init__(self):
-        grc_wxgui.top_block_gui.__init__(self, title="PSK Degradation Simulator (by Dinart @LAPS/UFCG)")
+        grc_wxgui.top_block_gui.__init__(self, title="PSK Channel Simulator (by Dinart @LAPS/UFCG)")
         
         ##################################################
         # Default Variables
@@ -34,7 +34,7 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.band= 100
         self.excess_bw=0.35
         self.fading_flag = False 
-        self.ray_sigma = 1
+        self.ray_sigma = 0.5
         
         ##################################################
         # Blocks Definition
@@ -113,8 +113,10 @@ class psk_simu(grc_wxgui.top_block_gui):
             proportion=0)
         self.fading_slider = forms.slider(parent=self.GetWin(),
             sizer=fading_sizer, value=self.ray_sigma, callback=self.set_fading,
-            minimum=0, maximum=10, style=wx.RA_HORIZONTAL, proportion=1)
+            minimum=0, maximum=1, style=wx.RA_HORIZONTAL, proportion=1)
         self.GridAdd(fading_sizer, 6, 4, 1, 2)
+        self.fading_slider.Disable(self.toogle_fading)
+        self.fading_text_box.Disable(self.toogle_fading)
         
         #Defines and adds modulation type chooser to GUI
         self._mod_type_chooser = forms.radio_buttons(parent=self.GetWin(),
@@ -199,13 +201,19 @@ class psk_simu(grc_wxgui.top_block_gui):
             self._snr_text_box.Disable(True)
             self.band_slider.Disable(True)
             self.band_text_box.Disable(True)
+            self.fading_check.Disable(True)
+            self.fading_text_box.Disable(True)
             self.constel.win.plotter.set_title('TX Constellation Plot')
             self.fft.win.change_yperdiv(30)
+            if(self.fading_flag):
+                self.fading_flag = False
+                self.fading_check.set_value(self.fading_flag)
         if view:
             self._snr_slider.Disable(False)
             self._snr_text_box.Disable(False)
             self.band_slider.Disable(False)
             self.band_text_box.Disable(False)
+            self.fading_check.Disable(False)
             self.constel.win.plotter.set_title('RX Constellation Plot')
             self.fft.win.change_yperdiv(20)
         time.sleep(.1)
@@ -238,11 +246,18 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.unlock()
         time.sleep(.1)
     
-    def toogle_fading(self,flag):
-        pass
-
-    def set_fading(self,ray_sigma):
-        pass
+    def toogle_fading(self, flag):
+        self.fading_flag = flag
+        self.channel.toggle_fading(flag,self.ray_sigma)
+        self.fading_slider.Disable(not self.fading_flag)
+        self.fading_text_box.Disable(not self.fading_flag)
+        
+        
+    def set_fading(self, ray_sigma):
+        self.ray_sigma=ray_sigma
+        self.channel.set_fading(ray_sigma)
+        self.fading_slider.set_value(self.ray_sigma)
+        self.fading_text_box.set_value(self.ray_sigma)
         
 if __name__ == '__main__':
     tb = psk_simu()

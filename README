@@ -1,6 +1,6 @@
 Realtime Communication Link Analyzer
 
-dependencies: gnuradio
+dependencies: gnuradio, python std libs
 
 File Description:
 
@@ -12,6 +12,6 @@ constsink.py	Constelation Sink (Modified version)
 fftsink.py	FFT Sink (Modified version)
 fftwin.py	FFT Window (Modified Version
 
-Input Methods:
+Getting started:
 
-Self Explanatory (run psk_simu.py)
+Just run psk_simu.py, the interface is self-explanatory to anyone introduced to digital communications.

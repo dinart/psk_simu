@@ -1,3 +1,4 @@
+#!Modified Version, does not have control GUI!
 #
 # Copyright 2008,2009,2010 Free Software Foundation, Inc.
 #

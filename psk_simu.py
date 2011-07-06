@@ -1,26 +1,28 @@
 #!/usr/bin/env python
 ##################################################
-# PSK Educational Simulator
+# Communication System Graphical Analyzer
 # Author: Dinart Duarte Braga
-# Description: A simulator of a filtered AWGN channel PSK modulated communication system
-#              for educational purpose use.
+# Guiding: Edmar Candeia Gurjao
+# Description: PSK Channel GUI Analyzer with channel models that includes noise, limited bandwidth and fading
 ##################################################
 
 
+##################################################
+# Imports
+##################################################
 import utils, constsink, bersink
 from gnuradio import gr
 from gnuradio.wxgui import forms
 from grc_gnuradio import wxgui as grc_wxgui
-from gnuradio.wxgui import fftsink2
 import wx
-from numpy import random
+#from numpy import random
 import fftsink
 import time
 
 class psk_simu(grc_wxgui.top_block_gui):
 
     def __init__(self):
-        grc_wxgui.top_block_gui.__init__(self, title="PSK Channel Simulator (by Dinart @LAPS/UFCG)")
+        grc_wxgui.top_block_gui.__init__(self, title="Communication System Graphical Analyzer (by Dinart Duarte Braga @LAPS/UFCG)")
         
         ##################################################
         # Default Variables
@@ -34,7 +36,8 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.band= 100
         self.excess_bw=0.35
         self.fading_flag = False 
-        self.ray_sigma = 0.5
+        self.coe_time = 300
+        self.fading_state_rx = False
         
         ##################################################
         # Blocks Definition
@@ -58,10 +61,10 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.demodulator = utils.demods[self.mod_type](self.sps,excess_bw=self.excess_bw)     
         self.descrambler = gr.descrambler_bb(0x8A, 0x80, 3)
         self.char2float = gr.char_to_float()
-        self.mov_average1 = gr.moving_average_ff(524288, 1/524288., 10000)
-        self.mov_average2 = gr.moving_average_ff(524288, 1/524288., 10000)
+        self.mov_average = gr.moving_average_ff(524288, 1/524288., 10000)
         self.unpack = gr.packed_to_unpacked_bb(1, gr.GR_LSB_FIRST)
         self.ber = utils.ber_estim()
+        #self.ber = utils.ber_estim_simple(3)
 
         
         ##################################################
@@ -95,7 +98,7 @@ class psk_simu(grc_wxgui.top_block_gui):
             minimum=30, maximum=100, style=wx.RA_HORIZONTAL, proportion=1)
         self.GridAdd(band_sizer, 5, 3, 1, 3)
         
-        #Definition of Rayleigh GUI elements
+        #Defines and adds Rayleigh GUI elements
         self.fading_check = forms.check_box(
             parent=self.GetWin(),
             value=self.fading_flag,
@@ -108,12 +111,12 @@ class psk_simu(grc_wxgui.top_block_gui):
         
         fading_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.fading_text_box = forms.text_box(parent=self.GetWin(),
-            sizer=fading_sizer, value=self.ray_sigma, callback=self.set_fading,
-            label='Sigma', converter=forms.float_converter(),
+            sizer=fading_sizer, value=self.coe_time, callback=self.set_fading,
+            label='Tc (us)', converter=forms.float_converter(),
             proportion=0)
         self.fading_slider = forms.slider(parent=self.GetWin(),
-            sizer=fading_sizer, value=self.ray_sigma, callback=self.set_fading,
-            minimum=0, maximum=1, style=wx.RA_HORIZONTAL, proportion=1)
+            sizer=fading_sizer, value=self.coe_time, callback=self.set_fading,
+            minimum=10, maximum=300, style=wx.RA_HORIZONTAL, proportion=1)
         self.GridAdd(fading_sizer, 6, 4, 1, 2)
         self.fading_slider.Disable(self.toogle_fading)
         self.fading_text_box.Disable(self.toogle_fading)
@@ -126,7 +129,7 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.GridAdd(self._mod_type_chooser, 7, 4, 1, 2)
 
         
-        #Defines and adds signal chooser
+        #Defines and adds signal source chooser
         self.sig_src_chooser = forms.radio_buttons(parent=self.GetWin(),
             value=self.view, callback=self.callback_view,
             label="Signal Source", choices=[0,1],
@@ -157,18 +160,15 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.connect(self.pack, self.modulator, self.amp, self.channel, self.demodulator)
         self.connect(self.channel, self.fft)
         self.connect(self.demodulator.rrc_filter, self.constel)
-        self.connect(self.demodulator, self.descrambler, self.char2float, self.mov_average1)
-        self.connect(self.mov_average1, self.mov_average2, self.ber, self.number_sink)
+        self.connect(self.demodulator, self.descrambler, self.char2float, self.mov_average)
+        self.connect(self.mov_average, self.ber, self.number_sink)
         
-        ##################################################
-        # Callback Functions of GUI Elements
-        ##################################################
+##################################################
+# Callback Functions of GUI Elements
+##################################################
         
-        #Callback function of SNR slider, sets the Signal to Noise ratio
-        #of the AWGN Channel
-    def set_snr(self, snr, view):
-        self.channel.set_noise_voltage(view*self.symb_energy/10.0**(snr/10.0))
-        
+#Callback function of SNR slider, sets the Signal to Noise ratio
+#of the AWGN Channel       
         
     def callback_snr(self,snr):
         if snr > 30:
@@ -181,6 +181,8 @@ class psk_simu(grc_wxgui.top_block_gui):
         self._snr_text_box.set_value(self.snr)
         self.set_snr(self.snr,self.view)    
         
+#Callback function of bandwidth slider.
+        
     def callback_band(self,band):
         if band > 100:
             self.band = 100
@@ -191,6 +193,8 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.band_slider.set_value(self.band)
         self.band_text_box.set_value(self.band)
         self.channel.setband(self.band)
+        
+#Callback function of the signal source chooser
         
     def callback_view(self,view):
         self.view = view;
@@ -206,21 +210,22 @@ class psk_simu(grc_wxgui.top_block_gui):
             self.constel.win.plotter.set_title('TX Constellation Plot')
             self.fft.win.change_yperdiv(30)
             if(self.fading_flag):
-                self.fading_flag = False
-                self.fading_check.set_value(self.fading_flag)
+                self.fading_state_rx= True
+                self.fading_check.set_value(False)
         if view:
             self._snr_slider.Disable(False)
             self._snr_text_box.Disable(False)
             self.band_slider.Disable(False)
             self.band_text_box.Disable(False)
-            self.fading_check.Disable(False)
+            self.fading_check.Disable(self.fading_flag)
+            self.fading_check.set_value(self.fading_state_rx)
             self.constel.win.plotter.set_title('RX Constellation Plot')
             self.fft.win.change_yperdiv(20)
         time.sleep(.1)
 
-        #Callback function of the modulation type chooser, it blocks the
-        #flowgraph and changes modulator and demodulator, it also sets
-        #the M parameter of the Constellation Sink.
+#Callback function of the modulation type chooser, it blocks the
+#flowgraph and changes modulator and demodulator, it also sets
+#the M parameter of the Constellation Sink.
     def set_mod_type(self, mod_type):
         self.mod_type = mod_type
         self._mod_type_chooser.set_value(self.mod_type)
@@ -245,19 +250,30 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.connect(self.demodulator, self.descrambler)
         self.unlock()
         time.sleep(.1)
-    
+        
+##################################################
+# Control Functions
+##################################################
+
+#Function that turns fading on and off
+
     def toogle_fading(self, flag):
         self.fading_flag = flag
-        self.channel.toggle_fading(flag,self.ray_sigma)
+        self.channel.toggle_fading(flag,self.coe_time)
         self.fading_slider.Disable(not self.fading_flag)
         self.fading_text_box.Disable(not self.fading_flag)
         
-        
-    def set_fading(self, ray_sigma):
-        self.ray_sigma=ray_sigma
-        self.channel.set_fading(ray_sigma)
-        self.fading_slider.set_value(self.ray_sigma)
-        self.fading_text_box.set_value(self.ray_sigma)
+#Function that changes fading intensity
+
+    def set_fading(self, coe_time):
+        self.coe_time=coe_time
+        self.channel.set_fading(coe_time)
+        self.fading_slider.set_value(self.coe_time)
+        self.fading_text_box.set_value(self.coe_time)
+
+#Function that change SNR value
+    def set_snr(self, snr, view):
+        self.channel.set_noise_voltage(view*self.symb_energy/10.0**(snr/10.0))
         
 if __name__ == '__main__':
     tb = psk_simu()

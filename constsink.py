@@ -1,3 +1,4 @@
+#!Modified Version, does not have control GUI!
 #
 # Copyright 2008 Free Software Foundation, Inc.
 #
@@ -63,7 +64,7 @@ class const_sink_c(gr.hier_block2):
 		#blocks
 		self.alpha = alpha
 		self.fmax = fmax
-		sd = blks2.stream_to_vector_decimator(
+		self.sd = blks2.stream_to_vector_decimator(
 			item_size=gr.sizeof_gr_complex,
 			sample_rate=sample_rate,
 			vec_rate=frame_rate,
@@ -71,19 +72,22 @@ class const_sink_c(gr.hier_block2):
 		)
 		self.beta = .25*self.alpha**2 #redundant, will be updated
 		self.fmin = -self.fmax
-		gain_omega = .25*gain_mu**2 #redundant, will be updated
-		omega = 1 #set_sample_rate will update this
+		self.gain_omega = .25*gain_mu**2 #redundant, will be updated
+		self.omega = 1 #set_sample_rate will update this
+		self.mu = mu
+		self.gain_mu=gain_mu
+		self.omega_limit=omega_limit
 		# Costas frequency/phase recovery loop
 		# Critically damped 2nd order PLL
 		self.agc = gr.feedforward_agc_cc(16, 1.1)
 		self._costas = gr.costas_loop_cc(self.alpha, self.beta, self.fmax, self.fmin, M)
 		# Timing recovery loop
 		# Critically damped 2nd order DLL
-		self._retime = gr.clock_recovery_mm_cc(omega, gain_omega, mu, gain_mu, omega_limit)
+		self._retime = gr.clock_recovery_mm_cc(self.omega, self.gain_omega, self.mu, self.gain_mu, self.omega_limit)
 		msgq = gr.msg_queue(2)
 		sink = gr.message_sink(gr.sizeof_gr_complex*const_size, msgq, True)
 		#connect
-		self.connect(self, self.agc, self._costas, self._retime, sd, sink)
+		self.connect(self, self.agc, self._costas, self._retime, self.sd, sink)
 		
 		#controller
 		def setter(p, k, x): p[k] = x
@@ -99,9 +103,9 @@ class const_sink_c(gr.hier_block2):
 		self.controller.publish(OMEGA_KEY, self._retime.omega)
 		self.controller.subscribe(GAIN_OMEGA_KEY, self._retime.set_gain_omega)
 		self.controller.publish(GAIN_OMEGA_KEY, self._retime.gain_omega)
-		self.controller.subscribe(SAMPLE_RATE_KEY, sd.set_sample_rate)
+		self.controller.subscribe(SAMPLE_RATE_KEY, self.sd.set_sample_rate)
 		self.controller.subscribe(SAMPLE_RATE_KEY, lambda x: setter(self.controller, OMEGA_KEY, float(x)/symbol_rate))
-		self.controller.publish(SAMPLE_RATE_KEY, sd.sample_rate)
+		self.controller.publish(SAMPLE_RATE_KEY, self.sd.sample_rate)
 		#initial update
 		self.controller[SAMPLE_RATE_KEY] = sample_rate
 		#start input watcher
@@ -124,11 +128,16 @@ class const_sink_c(gr.hier_block2):
 		
 	def change_M(self,new_M):
 		self.disconnect(self.agc,self._costas)
-		self.disconnect(self._costas,self._retime)
+		self.disconnect(self._costas,self._retime,self.sd)
+		
 		del(self._costas)
+		#del(self._retime)
+		
 		self._costas = gr.costas_loop_cc(self.alpha, self.beta, self.fmax, self.fmin, new_M)
+		#self._retime = gr.clock_recovery_mm_cc(self.omega, self.gain_omega, self.mu, self.gain_mu, self.omega_limit)
+		
 		self.connect(self.agc,self._costas)
-		self.connect(self._costas,self._retime)
+		self.connect(self._costas,self._retime,self.sd)
 		
 
 ##################################################
@@ -214,5 +223,4 @@ class const_window(wx.Panel, pubsub):
 		self.plotter.set_y_grid(-y_max, y_max, common.get_clean_num(2.0*y_max/self[Y_DIVS_KEY]))
 		#update plotter
 		self.plotter.update()
-
 

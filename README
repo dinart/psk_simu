@@ -1,5 +1,17 @@
-Real time PSK simulator
+Realtime Communication Link Analyzer
+
+dependencies: gnuradio
+
+File Description:
+
+psk_simu.py -   Main block of the program. Contains the main code.
+utils.py -      Utility library. Contains a channel model, usefull dictionaries and BER estimator.
+
+bersink.py -    BER visualizer (Modified version of number sink)
+constsink.py	Constelation Sink (Modified version)
+fftsink.py	FFT Sink (Modified version)
+fftwin.py	FFT Window (Modified Version
 
 Input Methods:
 
-Self Explanatory (Run the program!)
+Self Explanatory (run psk_simu.py)

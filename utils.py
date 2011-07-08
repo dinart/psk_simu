@@ -19,7 +19,8 @@ import numpy
 mods = {'DBPSK':blks2.dbpsk_mod, 'DQPSK':blks2.dqpsk_mod, 'D8PSK':blks2.d8psk_mod }
 demods = {'DBPSK':blks2.dbpsk_demod, 'DQPSK':blks2.dqpsk_demod, 'D8PSK':blks2.d8psk_demod }
 k = {'DBPSK':1, 'DQPSK':2, 'D8PSK':3}
-M = {'DBPSK':2, 'DQPSK':4, 'D8PSK':4} #NOT the Cardinality of the modulation!!
+M = {'DBPSK':2, 'DQPSK':4, 'D8PSK':8}
+gain = {'DBPSK':0.87, 'DQPSK':0.68, 'D8PSK':27000}
 
 #Channel Model (AWGN + Filter)
 #Rayleigh scattering is added dynamically.
@@ -31,7 +32,7 @@ class channel(gr.hier_block2):
         self.adder = gr.add_cc()
         self.noise = gr.noise_source_c(gr.GR_GAUSSIAN, 1, -42)
         self.ampl = gr.multiply_const_cc(ampl_i)
-        self.taps = gr.firdes.low_pass_2 (1,280,95,5,60,gr.firdes.WIN_KAISER)
+        self.taps = gr.firdes.low_pass_2 (1,560,band/2,5,80,gr.firdes.WIN_KAISER)
         self.filter=gr.interp_fir_filter_ccf(1, self.taps)
         self.fading = False
         
@@ -39,6 +40,13 @@ class channel(gr.hier_block2):
         self.connect(self,self.filter,(self.adder,0))
         self.connect(self.noise, self.ampl, (self.adder,1))
         self.connect(self.adder, self)
+
+    def toggle_filter(self,flag):
+        if(flag):
+            self.filter.set_taps(self.taps)
+        else:
+            self.filter.set_taps([1])
+            
         
         
 #function that toggles fading on and off
@@ -50,7 +58,7 @@ class channel(gr.hier_block2):
             self.ray = gr.noise_source_c(gr.GR_GAUSSIAN, 1, -42);
             self.ray.set_amplitude(0.7)
             self.mag = gr.complex_to_mag(1)
-            self.taps_lp = gr.firdes.low_pass_2 (1,280,band,5,80,gr.firdes.WIN_KAISER)
+            self.taps_lp = gr.firdes.low_pass_2 (1,560,band,5,80,gr.firdes.WIN_KAISER)
             self.taps_gau = gr.firdes.gaussian(1,2,0.675,20)
             self.taps_ray = numpy.convolve(numpy.array(self.taps_gau),numpy.array(self.taps_lp))
             self.filter_ray = gr.interp_fir_filter_fff(1, self.taps_ray)
@@ -109,7 +117,7 @@ class channel(gr.hier_block2):
     def set_fading(self,coe_time):
         if(self.fading):
             band=1e3/coe_time
-            self.taps_lp = gr.firdes.low_pass_2 (1,280,band,5,80,gr.firdes.WIN_KAISER)
+            self.taps_lp = gr.firdes.low_pass_2 (1,560,band,5,80,gr.firdes.WIN_KAISER)
             self.taps_gau = gr.firdes.gaussian(1,2,0.675,20)
             self.taps_ray = numpy.convolve(numpy.array(self.taps_gau),numpy.array(self.taps_lp))
             self.filter_ray.set_taps(self.taps_ray)
@@ -118,7 +126,7 @@ class channel(gr.hier_block2):
     def setband(self,band):
         #self.disconnect(self,self.filter)
         #self.disconnect(self.filter,(self.adder,0))
-        self.taps = gr.firdes.low_pass_2 (1,280,band-5,5,60,gr.firdes.WIN_KAISER)
+        self.taps = gr.firdes.low_pass_2 (1,560,band/2,5,80,gr.firdes.WIN_KAISER)
         self.filter.set_taps(self.taps)
         #self.filter=gr.interp_fir_filter_ccf(1, self.taps)
         #self.connect(self,self.filter)

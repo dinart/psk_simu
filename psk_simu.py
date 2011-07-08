@@ -27,16 +27,16 @@ class psk_simu(grc_wxgui.top_block_gui):
         ##################################################
         # Default Variables
         ##################################################
-        self.sps = 2
-        self.snr = 10
+        self.sps = 4
+        self.snr = 20
         self.samp_rate = 140000
         self.mod_type = "DBPSK"
         self.symb_energy = 1
         self.view = 1
-        self.band= 100
+        self.band= 300
         self.excess_bw=0.35
         self.fading_flag = False 
-        self.coe_time = 300
+        self.coe_time = 400
         self.fading_state_rx = False
         
         ##################################################
@@ -49,20 +49,19 @@ class psk_simu(grc_wxgui.top_block_gui):
         #self.source = gr.vector_source_b([random.randint(0, 2) for i in range(0,10^8)], True)
         self.source = gr.vector_source_b((1,), True, 1)
         self.thottle = gr.throttle(gr.sizeof_char,10e5)
-        self.scrambler = gr.scrambler_bb(0x8A, 0x80, 3) #Taxa de simbolos constante
+        self.scrambler = gr.scrambler_bb(0x40801, 0x92F72, 20) #Taxa de simbolos constante
         self.pack = gr.unpacked_to_packed_bb(1, gr.GR_MSB_FIRST)
         self.modulator = utils.mods[self.mod_type](self.sps,excess_bw=self.excess_bw)        
         self.amp = gr.multiply_const_vcc((self.symb_energy, ))
-        self.channel = utils.channel(self.symb_energy/10.0**(self.snr/10.0))
+        self.channel = utils.channel(self.symb_energy/10.0**(self.snr/10.0),self.band)
         
         #The noisy signal is demodulated, descrambled and the BER
         #is estimated by the ber_estim block using the receiver
         #density of 0 bits.
         self.demodulator = utils.demods[self.mod_type](self.sps,excess_bw=self.excess_bw)     
-        self.descrambler = gr.descrambler_bb(0x8A, 0x80, 3)
+        self.descrambler = gr.descrambler_bb(0x40801, 0x92F72, 20)
         self.char2float = gr.char_to_float()
         self.mov_average = gr.moving_average_ff(524288, 1/524288., 10000)
-        self.unpack = gr.packed_to_unpacked_bb(1, gr.GR_LSB_FIRST)
         self.ber = utils.ber_estim()
         #self.ber = utils.ber_estim_simple(3)
 
@@ -72,7 +71,7 @@ class psk_simu(grc_wxgui.top_block_gui):
         ##################################################
         
         #Defines an adds FFT Window to GUI
-        self.fft = fftsink.fft_sink_c(self.GetWin(), sample_rate=self.samp_rate*self.sps)
+        self.fft = fftsink.fft_sink_c(self.GetWin(), sample_rate=self.samp_rate*self.sps, baseband_freq=5e6)
         self.GridAdd(self.fft.win, 0,3,4,3)
         self.ctr= gr.complex_to_real(1)
         
@@ -95,7 +94,7 @@ class psk_simu(grc_wxgui.top_block_gui):
             proportion=0)
         self.band_slider = forms.slider(parent=self.GetWin(),
             sizer=band_sizer, value=self.band, callback=self.callback_band,
-            minimum=30, maximum=100, style=wx.RA_HORIZONTAL, proportion=1)
+            minimum=30, maximum=300, style=wx.RA_HORIZONTAL, proportion=1)
         self.GridAdd(band_sizer, 5, 3, 1, 3)
         
         #Defines and adds Rayleigh GUI elements
@@ -116,7 +115,7 @@ class psk_simu(grc_wxgui.top_block_gui):
             proportion=0)
         self.fading_slider = forms.slider(parent=self.GetWin(),
             sizer=fading_sizer, value=self.coe_time, callback=self.set_fading,
-            minimum=10, maximum=300, style=wx.RA_HORIZONTAL, proportion=1)
+            minimum=10, maximum=400, style=wx.RA_HORIZONTAL, proportion=1)
         self.GridAdd(fading_sizer, 6, 4, 1, 2)
         self.fading_slider.Disable(self.toogle_fading)
         self.fading_text_box.Disable(self.toogle_fading)
@@ -140,8 +139,7 @@ class psk_simu(grc_wxgui.top_block_gui):
         #Definition of the of constellation window and attachment to the GUI
         self.constel = constsink.const_sink_c(self.GetWin(),
             title="RX Constellation Plot",  sample_rate=self.samp_rate,
-            M = utils.M[self.mod_type], symbol_rate=self.samp_rate/float(self.sps),
-            const_size=256)
+            const_size=256, mod=self.mod_type)
         self.GridAdd(self.constel.win,0,0,8,3)
         
         
@@ -159,7 +157,7 @@ class psk_simu(grc_wxgui.top_block_gui):
         #self.connect(self.source , self.thottle, self.pack)
         self.connect(self.pack, self.modulator, self.amp, self.channel, self.demodulator)
         self.connect(self.channel, self.fft)
-        self.connect(self.demodulator.rrc_filter, self.constel)
+        self.connect(self.demodulator.diffdec, self.constel)
         self.connect(self.demodulator, self.descrambler, self.char2float, self.mov_average)
         self.connect(self.mov_average, self.ber, self.number_sink)
         
@@ -184,8 +182,8 @@ class psk_simu(grc_wxgui.top_block_gui):
 #Callback function of bandwidth slider.
         
     def callback_band(self,band):
-        if band > 100:
-            self.band = 100
+        if band > 300:
+            self.band = 300
         elif band < 30:
             self.band = 30
         else:
@@ -212,6 +210,7 @@ class psk_simu(grc_wxgui.top_block_gui):
             if(self.fading_flag):
                 self.fading_state_rx= True
                 self.fading_check.set_value(False)
+            self.channel.toggle_filter(False)
         if view:
             self._snr_slider.Disable(False)
             self._snr_text_box.Disable(False)
@@ -221,7 +220,9 @@ class psk_simu(grc_wxgui.top_block_gui):
             self.fading_check.set_value(self.fading_state_rx)
             self.constel.win.plotter.set_title('RX Constellation Plot')
             self.fft.win.change_yperdiv(20)
-        time.sleep(.1)
+            self.channel.toggle_filter(True)
+        time.sleep(.05)
+        self.set_mod_type(self.mod_type)
 
 #Callback function of the modulation type chooser, it blocks the
 #flowgraph and changes modulator and demodulator, it also sets
@@ -239,17 +240,17 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.connect(self.modulator, self.amp)
 
         self.disconnect(self.channel, self.demodulator)
-        self.disconnect(self.demodulator.rrc_filter, self.constel)
+        self.disconnect(self.demodulator.diffdec, self.constel)
         self.disconnect(self.demodulator, self.descrambler)
         self.demodulator = utils.demods[self.mod_type](self.sps,excess_bw=self.excess_bw) 
         
-        self.constel.change_M(utils.M[self.mod_type])
+        self.constel.change_mod(self.mod_type)
         
         self.connect(self.channel, self.demodulator)
-        self.connect(self.demodulator.rrc_filter, self.constel)
+        self.connect(self.demodulator.diffdec, self.constel)
         self.connect(self.demodulator, self.descrambler)
         self.unlock()
-        time.sleep(.1)
+        time.sleep(0.1)
         
 ##################################################
 # Control Functions

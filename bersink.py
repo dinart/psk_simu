@@ -157,6 +157,8 @@ class number_window(wx.Panel, pubsub):
 		if not self[RUNNING_KEY]: return
 		format_string = "%%.%df"%self.decimal_places
 		sample = numpy.fromstring(msg, numpy.float32)[-1]
+		if sample > 100:
+			sample = 100
 		label_text = "%s %s"%(format_string%sample, self.units)
 		self[VALUE_REAL_KEY] = sample
 		#set label text

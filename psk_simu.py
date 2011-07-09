@@ -27,16 +27,15 @@ class psk_simu(grc_wxgui.top_block_gui):
         ##################################################
         # Default Variables
         ##################################################
-        self.sps = 4
+        self.sps = 2
         self.snr = 20
-        self.samp_rate = 140000
+        self.symbol_rate = 140000
         self.mod_type = "DBPSK"
-        self.symb_energy = 1
         self.view = 1
-        self.band= 300
+        self.band= 200
         self.excess_bw=0.35
         self.fading_flag = False 
-        self.coe_time = 400
+        self.fdts = -7
         self.fading_state_rx = False
         
         ##################################################
@@ -51,9 +50,8 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.thottle = gr.throttle(gr.sizeof_char,10e5)
         self.scrambler = gr.scrambler_bb(0x40801, 0x92F72, 20) #Taxa de simbolos constante
         self.pack = gr.unpacked_to_packed_bb(1, gr.GR_MSB_FIRST)
-        self.modulator = utils.mods[self.mod_type](self.sps,excess_bw=self.excess_bw)        
-        self.amp = gr.multiply_const_vcc((self.symb_energy, ))
-        self.channel = utils.channel(self.symb_energy/10.0**(self.snr/10.0),self.band)
+        self.modulator = utils.mods[self.mod_type](self.sps,excess_bw=self.excess_bw)
+        self.channel = utils.channel(1/10.0**(self.snr/10.0),self.band,self.symbol_rate,self.sps)
         
         #The noisy signal is demodulated, descrambled and the BER
         #is estimated by the ber_estim block using the receiver
@@ -71,7 +69,7 @@ class psk_simu(grc_wxgui.top_block_gui):
         ##################################################
         
         #Defines an adds FFT Window to GUI
-        self.fft = fftsink.fft_sink_c(self.GetWin(), sample_rate=self.samp_rate*self.sps, baseband_freq=5e6)
+        self.fft = fftsink.fft_sink_c(self.GetWin(), sample_rate=self.symbol_rate*self.sps, baseband_freq=5e6)
         self.GridAdd(self.fft.win, 0,3,4,3)
         self.ctr= gr.complex_to_real(1)
         
@@ -94,31 +92,20 @@ class psk_simu(grc_wxgui.top_block_gui):
             proportion=0)
         self.band_slider = forms.slider(parent=self.GetWin(),
             sizer=band_sizer, value=self.band, callback=self.callback_band,
-            minimum=30, maximum=300, style=wx.RA_HORIZONTAL, proportion=1)
+            minimum=30, maximum=200, style=wx.RA_HORIZONTAL, proportion=1)
         self.GridAdd(band_sizer, 5, 3, 1, 3)
         
         #Defines and adds Rayleigh GUI elements
-        self.fading_check = forms.check_box(
-            parent=self.GetWin(),
-            value=self.fading_flag,
-            callback=self.toogle_fading,
-            label='Fading',
-            true=True,
-            false=False,
-        )
-        self.GridAdd(self.fading_check,6, 3, 1, 1)
         
         fading_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.fading_text_box = forms.text_box(parent=self.GetWin(),
-            sizer=fading_sizer, value=self.coe_time, callback=self.set_fading,
-            label='Tc (us)', converter=forms.float_converter(),
+            sizer=fading_sizer, value=self.fdts, callback=self.callback_fading,
+            label='Fading', converter=forms.float_converter(),
             proportion=0)
         self.fading_slider = forms.slider(parent=self.GetWin(),
-            sizer=fading_sizer, value=self.coe_time, callback=self.set_fading,
-            minimum=10, maximum=400, style=wx.RA_HORIZONTAL, proportion=1)
-        self.GridAdd(fading_sizer, 6, 4, 1, 2)
-        self.fading_slider.Disable(self.toogle_fading)
-        self.fading_text_box.Disable(self.toogle_fading)
+            sizer=fading_sizer, value=self.fdts, callback=self.callback_fading,
+            minimum=-7, maximum=-2, style=wx.RA_HORIZONTAL, proportion=1)
+        self.GridAdd(fading_sizer, 6, 3, 1, 3)
         
         #Defines and adds modulation type chooser to GUI
         self._mod_type_chooser = forms.radio_buttons(parent=self.GetWin(),
@@ -138,14 +125,14 @@ class psk_simu(grc_wxgui.top_block_gui):
         
         #Definition of the of constellation window and attachment to the GUI
         self.constel = constsink.const_sink_c(self.GetWin(),
-            title="RX Constellation Plot",  sample_rate=self.samp_rate,
+            title="RX Constellation Plot",  sample_rate=self.symbol_rate,
             const_size=256, mod=self.mod_type)
         self.GridAdd(self.constel.win,0,0,8,3)
         
         
         #Definition of the constellation sink window and attachment to the GUI
         self.number_sink = bersink.number_sink_f(self.GetWin(),
-            sample_rate=self.samp_rate)
+            sample_rate=self.symbol_rate)
         self.GridAdd(self.number_sink.win,8,0,1,6)
         
         ##################################################
@@ -155,7 +142,7 @@ class psk_simu(grc_wxgui.top_block_gui):
         #The necessary block connections to the system work as described above.
         self.connect(self.source, self.scrambler , self.thottle, self.pack)
         #self.connect(self.source , self.thottle, self.pack)
-        self.connect(self.pack, self.modulator, self.amp, self.channel, self.demodulator)
+        self.connect(self.pack, self.modulator, self.channel, self.demodulator)
         self.connect(self.channel, self.fft)
         self.connect(self.demodulator.diffdec, self.constel)
         self.connect(self.demodulator, self.descrambler, self.char2float, self.mov_average)
@@ -169,15 +156,15 @@ class psk_simu(grc_wxgui.top_block_gui):
 #of the AWGN Channel       
         
     def callback_snr(self,snr):
-        if snr > 30:
-            self.snr = 30
-        elif snr < -10:
-            self.snr = -10
-        else:
-            self.snr = snr;
+        #if snr > 30:
+        #    self.snr = 30
+        #elif snr < -10:
+        #    self.snr = -10
+        #else:
+        self.snr = snr;
         self._snr_slider.set_value(self.snr)
         self._snr_text_box.set_value(self.snr)
-        self.set_snr(self.snr,self.view)    
+        self.channel.set_snr(self.snr,self.view)   
         
 #Callback function of bandwidth slider.
         
@@ -192,37 +179,44 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.band_text_box.set_value(self.band)
         self.channel.setband(self.band)
         
+#Callback function that changes fading level
+
+    def callback_fading(self, fdts):
+        self.fdts=fdts
+        self.channel.set_fading(fdts)
+        self.fading_slider.set_value(fdts)
+        self.fading_text_box.set_value(fdts)
+
 #Callback function of the signal source chooser
         
     def callback_view(self,view):
         self.view = view;
         self.sig_src_chooser.set_value(self.view)
-        self.set_snr(self.snr,self.view)
+        self.callback_snr(self.snr)
+        self.callback_band(240)
         if not view:
+            self.channel.set_fading(0)
             self._snr_slider.Disable(True)
             self._snr_text_box.Disable(True)
             self.band_slider.Disable(True)
             self.band_text_box.Disable(True)
-            self.fading_check.Disable(True)
             self.fading_text_box.Disable(True)
+            self.fading_slider.Disable(True)
             self.constel.win.plotter.set_title('TX Constellation Plot')
             self.fft.win.change_yperdiv(30)
-            if(self.fading_flag):
-                self.fading_state_rx= True
-                self.fading_check.set_value(False)
-            self.channel.toggle_filter(False)
         if view:
+            self.callback_snr(self.snr)
+            self.channel.set_fading(self.fdts)
+            self.callback_band(self.band)
             self._snr_slider.Disable(False)
             self._snr_text_box.Disable(False)
             self.band_slider.Disable(False)
             self.band_text_box.Disable(False)
-            self.fading_check.Disable(self.fading_flag)
-            self.fading_check.set_value(self.fading_state_rx)
+            self.fading_text_box.Disable(False)
+            self.fading_slider.Disable(False)
             self.constel.win.plotter.set_title('RX Constellation Plot')
             self.fft.win.change_yperdiv(20)
-            self.channel.toggle_filter(True)
         time.sleep(.05)
-        self.set_mod_type(self.mod_type)
 
 #Callback function of the modulation type chooser, it blocks the
 #flowgraph and changes modulator and demodulator, it also sets
@@ -234,10 +228,10 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.lock()
         
         self.disconnect(self.pack, self.modulator)
-        self.disconnect(self.modulator, self.amp)
+        self.disconnect(self.modulator, self.channel)
         self.modulator = utils.mods[self.mod_type](self.sps,excess_bw=self.excess_bw) 
         self.connect(self.pack, self.modulator)
-        self.connect(self.modulator, self.amp)
+        self.connect(self.modulator, self.channel)
 
         self.disconnect(self.channel, self.demodulator)
         self.disconnect(self.demodulator.diffdec, self.constel)
@@ -251,30 +245,6 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.connect(self.demodulator, self.descrambler)
         self.unlock()
         time.sleep(0.1)
-        
-##################################################
-# Control Functions
-##################################################
-
-#Function that turns fading on and off
-
-    def toogle_fading(self, flag):
-        self.fading_flag = flag
-        self.channel.toggle_fading(flag,self.coe_time)
-        self.fading_slider.Disable(not self.fading_flag)
-        self.fading_text_box.Disable(not self.fading_flag)
-        
-#Function that changes fading intensity
-
-    def set_fading(self, coe_time):
-        self.coe_time=coe_time
-        self.channel.set_fading(coe_time)
-        self.fading_slider.set_value(self.coe_time)
-        self.fading_text_box.set_value(self.coe_time)
-
-#Function that change SNR value
-    def set_snr(self, snr, view):
-        self.channel.set_noise_voltage(view*self.symb_energy/10.0**(snr/10.0))
         
 if __name__ == '__main__':
     tb = psk_simu()

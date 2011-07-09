@@ -60,11 +60,12 @@ class const_sink_c(gr.hier_block2):
 			vec_rate=frame_rate,
 			vec_len=const_size,
 		)
+		self. agc = gr.agc2_cc(0.6e-1, 1e-3, 1, 1, 100)
 		self.gain= gr.multiply_const_cc(utils.gain[mod])
 		msgq = gr.msg_queue(2)
 		sink = gr.message_sink(gr.sizeof_gr_complex*const_size, msgq, True)
 		#connect
-		self.connect(self, self.gain, self.sd, sink)
+		self.connect(self, self.agc, self.gain, self.sd, sink)
 		
 		#controller
 		def setter(p, k, x): p[k] = x

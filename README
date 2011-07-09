@@ -1,15 +1,16 @@
 Realtime Communication Link Analyzer
 
-dependencies: gnuradio, gnuradio-companion libs and python standard libs
+dependencies: gnuradio, python std libs
 
 File Description:
 
 psk_simu.py -   Main block of the program. Contains the main code.
 utils.py -      Utility library. Contains a channel model, usefull dictionaries and BER estimator.
 
-bersink.py -    BER Sink (Modified version of number sink)
+bersink.py -    BER visualizer (Modified version of number sink)
 constsink.py	Constelation Sink (Modified version)
 fftsink.py	FFT Sink (Modified version)
+fftwin.py	FFT Window (Modified Version
 
 Getting started:
 

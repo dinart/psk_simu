@@ -10,7 +10,7 @@
 # Imports
 ##################################################
 from gnuradio import gr, blks2
-import numpy
+import numpy, math
 
 
 ##################################################
@@ -20,128 +20,148 @@ mods = {'DBPSK':blks2.dbpsk_mod, 'DQPSK':blks2.dqpsk_mod, 'D8PSK':blks2.d8psk_mo
 demods = {'DBPSK':blks2.dbpsk_demod, 'DQPSK':blks2.dqpsk_demod, 'D8PSK':blks2.d8psk_demod }
 k = {'DBPSK':1, 'DQPSK':2, 'D8PSK':3}
 M = {'DBPSK':2, 'DQPSK':4, 'D8PSK':8}
-gain = {'DBPSK':0.87, 'DQPSK':0.68, 'D8PSK':27000}
+gain = {'DBPSK':1, 'DQPSK':1, 'D8PSK':270}
 
 #Channel Model (AWGN + Filter)
 #Rayleigh scattering is added dynamically.
 class channel(gr.hier_block2):
-    def __init__(self,ampl_i,band=0):
+    def __init__(self,ampl_i,band,symbol_rate,sps):
         gr.hier_block2.__init__(self,"Channel",
                                 gr.io_signature(1,1,gr.sizeof_gr_complex),
                                 gr.io_signature(1,1,gr.sizeof_gr_complex))
+        
+        self.symbol_rate = symbol_rate
+        self.sample_rate=symbol_rate*sps
+        self.fading = False
         self.adder = gr.add_cc()
         self.noise = gr.noise_source_c(gr.GR_GAUSSIAN, 1, -42)
         self.ampl = gr.multiply_const_cc(ampl_i)
-        self.taps = gr.firdes.low_pass_2 (1,560,band/2,5,80,gr.firdes.WIN_KAISER)
-        self.filter=gr.interp_fir_filter_ccf(1, self.taps)
-        self.fading = False
+        self.taps = gr.firdes.low_pass_2 (1,280,band/2,5,80,gr.firdes.WIN_KAISER)
+        self.filter=gr.fir_filter_ccf(1,self.taps)
         
         #Connects
         self.connect(self,self.filter,(self.adder,0))
         self.connect(self.noise, self.ampl, (self.adder,1))
         self.connect(self.adder, self)
 
-    def toggle_filter(self,flag):
-        if(flag):
-            self.filter.set_taps(self.taps)
-        else:
-            self.filter.set_taps([1])
-            
-        
-        
-#function that toggles fading on and off
-    def toggle_fading(self,flag,coe_time):
+           
+    def toggle_fading(self,flag,fd):
         self.lock()
-        if (flag):
+        
+        if(flag):
             self.disconnect(self,self.filter)
-            band=1e3/coe_time
-            self.ray = gr.noise_source_c(gr.GR_GAUSSIAN, 1, -42);
-            self.ray.set_amplitude(0.7)
-            self.mag = gr.complex_to_mag(1)
-            self.taps_lp = gr.firdes.low_pass_2 (1,560,band,5,80,gr.firdes.WIN_KAISER)
-            self.taps_gau = gr.firdes.gaussian(1,2,0.675,20)
-            self.taps_ray = numpy.convolve(numpy.array(self.taps_gau),numpy.array(self.taps_lp))
-            self.filter_ray = gr.interp_fir_filter_fff(1, self.taps_ray)
-            self.connect(self.ray,self.mag,self.filter_ray)
+            self.ray=rayleigh(fd,5,self.sample_rate)
+            self.connect(self,self.ray,self.filter)     
+            self.fading=True                
             
-            self.real = gr.complex_to_real(1)
-            self.imag = gr.complex_to_imag(1)
-            self.connect(self,self.real)
-            self.connect(self,self.imag)
-            
-            self.prodreal = gr.multiply_ff()
-            self.prodimag = gr.multiply_ff()
-            self.connect(self.real,(self.prodreal,0))
-            self.connect(self.imag,(self.prodimag,0))
-            self.connect(self.filter_ray,(self.prodreal,1))
-            self.connect(self.filter_ray,(self.prodimag,1))
-            
-            self.realtocom = gr.float_to_complex(1)
-            self.connect(self.prodreal,(self.realtocom,0))
-            self.connect(self.prodimag,(self.realtocom,1))
-            
-            self.connect(self.realtocom, self.filter)
         else:
-            self.disconnect(self, self.real)
-            self.disconnect(self, self.imag)
-            self.disconnect(self.realtocom, self.filter)
-            self.connect(self,self.filter)
+            if(self.fading):
+                self.disconnect(self,self.ray,self.filter)
+                del(self.ray)
+                self.connect(self,self.filter)
+                self.fading=False
             
-            self.disconnect(self.ray,self.mag, self.filter_ray)
-            self.disconnect(self.real,(self.prodreal,0))
-            self.disconnect(self.imag,(self.prodimag,0))
-            self.disconnect(self.filter_ray,(self.prodreal,1))
-            self.disconnect(self.filter_ray,(self.prodimag,1))
-            self.disconnect(self.prodreal,(self.realtocom,0))
-            self.disconnect(self.prodimag,(self.realtocom,1))
-            del(self.ray)
-            del(self.mag)
-            del(self.real)
-            del(self.imag)
-            del(self.filter_ray)
-
-            del(self.prodreal)
-            del(self.prodimag)
-            del(self.realtocom)
-               
-        self.fading=flag
         self.unlock()
+            
+    def set_fading(self,fdts):
+        fd= 10**fdts*self.symbol_rate
+        #fd= fdts/100*self.symbol_rate
+        if(fd > 10**-7*self.symbol_rate):
+            if(not self.fading):
+                self.toggle_fading(True,fd)
+            else:
+                self.ray.set_fd(fd)
+        else:
+            self.toggle_fading(False,fd)
+            
+    def set_snr(self, snr, view):
+        self.ampl.set_k(view*(1/10.0**(snr/10.0)))
         
-##################################################
-# Functions that change degradation levels
-##################################################
-
-    def set_noise_voltage(self,new_amp):
-        self.ampl.set_k(new_amp)
-        
-    def set_fading(self,coe_time):
-        if(self.fading):
-            band=1e3/coe_time
-            self.taps_lp = gr.firdes.low_pass_2 (1,560,band,5,80,gr.firdes.WIN_KAISER)
-            self.taps_gau = gr.firdes.gaussian(1,2,0.675,20)
-            self.taps_ray = numpy.convolve(numpy.array(self.taps_gau),numpy.array(self.taps_lp))
-            self.filter_ray.set_taps(self.taps_ray)
-        
-    
     def setband(self,band):
-        #self.disconnect(self,self.filter)
-        #self.disconnect(self.filter,(self.adder,0))
-        self.taps = gr.firdes.low_pass_2 (1,560,band/2,5,80,gr.firdes.WIN_KAISER)
-        self.filter.set_taps(self.taps)
-        #self.filter=gr.interp_fir_filter_ccf(1, self.taps)
-        #self.connect(self,self.filter)
-        #self.connect(self.filter,(self.adder,0))
+            self.taps = gr.firdes.low_pass_2 (1,280,band/2,5,80,gr.firdes.WIN_KAISER)
+            self.filter.set_taps(self.taps)
         
-#TODO: Implement Jakes model to fading. Current model is good only for small Tcs.
+        
+#Jakes Model for Fading Generation
 class rayleigh(gr.hier_block2):
-    def __init__(self,ampl_i,band=0):
-        gr.hier_block2.__init__(self,"AWGN Channel",
+    def __init__(self,fd,M,sample_rate):
+        gr.hier_block2.__init__(self,"Rayleigh Channel",
                                 gr.io_signature(1,1,gr.sizeof_gr_complex),
                                 gr.io_signature(1,1,gr.sizeof_gr_complex))
-        self.noise = gr.noise_source_c(gr.GR_GAUSSIAN, 1, -42)
-        self.taps = gr.firdes.low_pass_2 (1,280,95,5,60,gr.firdes.GAUSSIAN)
-        pass  
         
+        self.M = M
+        self.sample_rate = sample_rate
+        n=range(1,M+1)
+        N = 4*M+2
+        
+        f_n= [fd*math.cos(2*math.pi*x/N) for x in n]
+                
+        beta_n = [math.pi/M*x for x in n]
+        
+        a_n = [2*math.cos(x) for x in beta_n]
+        a_n.append(math.sqrt(2)*math.cos(math.pi/4))
+        a_n = [x*2/math.sqrt(N) for x in a_n]
+        
+        
+        b_n= [2*math.sin(x) for x in beta_n]
+        b_n.append(math.sqrt(2)*math.sin(math.pi/4))
+        b_n = [x*2/math.sqrt(N) for x in b_n]
+        
+        f_n.append(fd)
+                
+        self.sin_real = [gr.sig_source_f(self.sample_rate,gr.GR_COS_WAVE,f_n[i],a_n[i]) for i in range(M+1)]
+        self.sin_imag = [gr.sig_source_f(self.sample_rate,gr.GR_COS_WAVE,f_n[i],b_n[i]) for i in range(M+1)]
+            
+        self.add_real = gr.add_ff(1)
+        self.add_imag = gr.add_ff(1)
+        
+        for i in range (M+1):
+            self.connect(self.sin_real[i],(self.add_real,i))
+  
+        for i in range (M+1):
+            self.connect(self.sin_imag[i],(self.add_imag,i))          
+            
+        self.ftoc = gr.float_to_complex(1)
+        
+        self.connect(self.add_real,(self.ftoc,0))
+        self.connect(self.add_imag,(self.ftoc,1))
+        self.mulc = gr.multiply_const_cc((0.5))
+        
+        #self.divide = gr.divide_cc(1)
+        #self.connect(self,(self.divide,0))
+        #self.connect(self.ftoc,(self.divide,1))
+        #self.connect(self.divide, self)
+        self.prod = gr.multiply_cc(1)
+        self.connect(self,(self.prod,0))
+        self.connect(self.ftoc,self.mulc,(self.prod,1))
+        self.connect(self.prod, self)
+        
+    def set_fd(self,fd):
+        M = self.M
+        n=range(1,M+1)
+        N = 4*M+2
+        
+        f_n= [fd*math.cos(2*math.pi*x/N) for x in n]
+                
+        beta_n = [math.pi/M*x for x in n]
+        
+        a_n = [2*math.cos(x) for x in beta_n]
+        a_n.append(math.sqrt(2)*math.cos(math.pi/4))
+        a_n = [x*2/math.sqrt(N) for x in a_n]
+        
+        
+        b_n= [2*math.sin(x) for x in beta_n]
+        b_n.append(math.sqrt(2)*math.sin(math.pi/4))
+        b_n = [x*2/math.sqrt(N) for x in b_n]
+        
+        f_n.append(fd)
+        
+        for i in range(M+1):
+            self.sin_real[i].set_amplitude(a_n[i])
+            self.sin_imag[i].set_amplitude(b_n[i])
+            self.sin_real[i].set_frequency(f_n[i])
+            self.sin_imag[i].set_frequency(f_n[i])
+   
 
 #BER estimation using a quadratic polynomial, it results on more accuracy
 #approximations for BER > 10%, compared to dividing the descrambled density

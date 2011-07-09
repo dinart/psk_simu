@@ -100,7 +100,7 @@ class psk_simu(grc_wxgui.top_block_gui):
         fading_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.fading_text_box = forms.text_box(parent=self.GetWin(),
             sizer=fading_sizer, value=self.fdts, callback=self.callback_fading,
-            label='Fading', converter=forms.float_converter(),
+            label='Fading/log(FdTs)', converter=forms.float_converter(),
             proportion=0)
         self.fading_slider = forms.slider(parent=self.GetWin(),
             sizer=fading_sizer, value=self.fdts, callback=self.callback_fading,
@@ -195,7 +195,7 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.callback_snr(self.snr)
         self.callback_band(240)
         if not view:
-            self.channel.set_fading(0)
+            self.channel.set_fading(-7)
             self._snr_slider.Disable(True)
             self._snr_text_box.Disable(True)
             self.band_slider.Disable(True)

@@ -66,7 +66,7 @@ class channel(gr.hier_block2):
     def set_fading(self,fdts):
         fd= 10**fdts*self.symbol_rate
         #fd= fdts/100*self.symbol_rate
-        if(fd > 10**-7*self.symbol_rate):
+        if(fd > 10**-8*self.symbol_rate):
             if(not self.fading):
                 self.toggle_fading(True,fd)
             else:
@@ -77,7 +77,7 @@ class channel(gr.hier_block2):
     def set_snr(self, snr, view):
         self.ampl.set_k(view*(1/10.0**(snr/10.0)))
         
-    def setband(self,band):
+    def set_band(self,band):
             self.taps = gr.firdes.low_pass_2 (1,280,band/2,5,80,gr.firdes.WIN_KAISER)
             self.filter.set_taps(self.taps)
         

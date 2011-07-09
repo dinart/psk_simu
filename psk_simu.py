@@ -22,7 +22,7 @@ import time
 class psk_simu(grc_wxgui.top_block_gui):
 
     def __init__(self):
-        grc_wxgui.top_block_gui.__init__(self, title="Communication System Graphical Analyzer (by Dinart Duarte Braga @LAPS/UFCG)")
+        grc_wxgui.top_block_gui.__init__(self, title="Communication System Graphical Analyzer (LAPS/UFCG)")
         
         ##################################################
         # Default Variables
@@ -35,7 +35,7 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.band= 200
         self.excess_bw=0.35
         self.fading_flag = False 
-        self.fdts = -7
+        self.fdts = -8
         self.fading_state_rx = False
         
         ##################################################
@@ -104,7 +104,7 @@ class psk_simu(grc_wxgui.top_block_gui):
             proportion=0)
         self.fading_slider = forms.slider(parent=self.GetWin(),
             sizer=fading_sizer, value=self.fdts, callback=self.callback_fading,
-            minimum=-7, maximum=-2, style=wx.RA_HORIZONTAL, proportion=1)
+            minimum=-8, maximum=-2, style=wx.RA_HORIZONTAL, proportion=1)
         self.GridAdd(fading_sizer, 6, 3, 1, 3)
         
         #Defines and adds modulation type chooser to GUI
@@ -177,7 +177,7 @@ class psk_simu(grc_wxgui.top_block_gui):
             self.band = band;
         self.band_slider.set_value(self.band)
         self.band_text_box.set_value(self.band)
-        self.channel.setband(self.band)
+        self.channel.set_band(self.band)
         
 #Callback function that changes fading level
 
@@ -193,9 +193,9 @@ class psk_simu(grc_wxgui.top_block_gui):
         self.view = view;
         self.sig_src_chooser.set_value(self.view)
         self.callback_snr(self.snr)
-        self.callback_band(240)
         if not view:
-            self.channel.set_fading(-7)
+            self.channel.set_fading(-8)
+            self.channel.set_band(240)
             self._snr_slider.Disable(True)
             self._snr_text_box.Disable(True)
             self.band_slider.Disable(True)
@@ -205,9 +205,8 @@ class psk_simu(grc_wxgui.top_block_gui):
             self.constel.win.plotter.set_title('TX Constellation Plot')
             self.fft.win.change_yperdiv(30)
         if view:
-            self.callback_snr(self.snr)
             self.channel.set_fading(self.fdts)
-            self.callback_band(self.band)
+            self.channel.set_band(self.band)
             self._snr_slider.Disable(False)
             self._snr_text_box.Disable(False)
             self.band_slider.Disable(False)

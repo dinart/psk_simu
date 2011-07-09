@@ -14,4 +14,11 @@ fftwin.py	FFT Window (Modified Version
 
 Getting started:
 
-Just run psk_simu.py, the interface is self-explanatory to anyone introduced to digital communications.
+Just run psk_simu.py and control the parameters:
+
+SNR: Signal to Noise Ratio (in dB)
+Bandwidth: Bandwidth of the passband signal (in kHz)
+
+Fading: Rayleigh fading based on Doppler Spectrum.
+
+Parameter is equal to log(Fd.Ts), where Fd is Doppler Shift Frequency and Ts is the sinalization period.

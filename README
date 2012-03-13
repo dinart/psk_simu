@@ -1,4 +1,4 @@
-Realtime Communication Link Analyzer
+Graphical Channel Simulator
 
 dependencies: gnuradio, python std libs
 
@@ -10,11 +10,10 @@ utils.py -      Utility library. Contains a channel model, usefull dictionaries 
 bersink.py -    BER visualizer (Modified version of number sink)
 constsink.py	Constelation Sink (Modified version)
 fftsink.py	FFT Sink (Modified version)
-fftwin.py	FFT Window (Modified Version
 
 Getting started:
 
-Just run psk_simu.py and control the parameters:
+Just run psk_simu.py and control the parameters in the GUI:
 
 SNR: Signal to Noise Ratio (in dB)
 Bandwidth: Bandwidth of the passband signal (in kHz)
